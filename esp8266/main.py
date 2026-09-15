@@ -5,22 +5,22 @@ import time
 from machine import Pin, PWM
 import network
 
-from esp8266.umqtt_simple import MQTTClient
+from umqtt_simple import MQTTClient
 
 
 # ============================================================
 # WIFI
 # ============================================================
 
-WIFI_SSID = "Y3C"
-WIFI_PASSWORD = "RCA@2024"
+WIFI_SSID = "Board room"
+WIFI_PASSWORD = "Meeting@2024"
 
 
 # ============================================================
 # MQTT
 # ============================================================
 
-MQTT_BROKER = "broker.hivemq.com"
+MQTT_BROKER = "10.12.74.55"
 MQTT_PORT = 1883
 
 MQTT_CLIENT_ID = (
@@ -43,7 +43,7 @@ STATUS_TOPIC = (
 # D5 on NodeMCU / Wemos ESP8266
 # = GPIO14
 
-SERVO_PIN = 14
+SERVO_PIN = 5
 
 SERVO_MIN_ANGLE = 10
 SERVO_MAX_ANGLE = 170
