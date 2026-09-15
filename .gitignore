@@ -81,6 +81,39 @@ target/
 # IPython
 profile_default/
 ipython_config.py
+# ============================================
+# .gitignore
+# ============================================
+
+# Environment
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Enrollment images (regenerated locally, never commit)
+data/enroll/
+
+# Recognition database (derived from enrollment)
+data/db/
+
+# Debug artifacts
+data/debug_aligned/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Models (large binaries — fetch via script instead)
+models/*.onnx
+models/*.xml
 
 # pyenv
 #   For a library or package, you might want to ignore these files since the code is
