@@ -112,8 +112,8 @@ data/debug_aligned/
 Thumbs.db
 
 # Models (large binaries — fetch via script instead)
-models/*.onnx
-models/*.xml
+*.onnx
+*.xml
 
 # pyenv
 #   For a library or package, you might want to ignore these files since the code is
