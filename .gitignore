@@ -24,8 +24,6 @@ venv.bak/
 # ============================================================
 # Secrets / environment config
 # ============================================================
-.env
-.env.*
 !.env.example
 
 # ============================================================
@@ -71,7 +69,6 @@ esp8266/*.log
 # ============================================================
 # IDE / editor
 # ============================================================
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -95,3 +92,9 @@ desktop.ini
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore
+config.bat
+node_modules
