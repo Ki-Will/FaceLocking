@@ -1,0 +1,25 @@
+{"timestamp": "2026-09-23T06:50:25+00:00", "action": "session_start", "description": "Locking session started for 'prince'."}
+{"timestamp": "2026-09-23T06:50:30+00:00", "action": "lock_acquired", "description": "Locked onto 'prince'."}
+{"timestamp": "2026-09-23T06:50:30+00:00", "action": "movement", "description": "'prince' moved left of center."}
+{"timestamp": "2026-09-23T06:50:32+00:00", "action": "smile", "description": "'prince' started smiling."}
+{"timestamp": "2026-09-23T06:50:33+00:00", "action": "blink", "description": "'prince' blinked."}
+{"timestamp": "2026-09-23T06:50:34+00:00", "action": "blink", "description": "'prince' blinked."}
+{"timestamp": "2026-09-23T06:50:36+00:00", "action": "frown", "description": "'prince' started frowning."}
+{"timestamp": "2026-09-23T06:50:37+00:00", "action": "movement", "description": "'prince' moved center of center."}
+{"timestamp": "2026-09-23T06:50:39+00:00", "action": "movement", "description": "'prince' moved left of center."}
+{"timestamp": "2026-09-23T06:50:40+00:00", "action": "smile", "description": "'prince' started smiling."}
+{"timestamp": "2026-09-23T06:50:40+00:00", "action": "blink", "description": "'prince' blinked."}
+{"timestamp": "2026-09-23T06:50:40+00:00", "action": "smile", "description": "'prince' started smiling."}
+{"timestamp": "2026-09-23T06:50:40+00:00", "action": "smile", "description": "'prince' started smiling."}
+{"timestamp": "2026-09-23T06:50:41+00:00", "action": "blink", "description": "'prince' blinked."}
+{"timestamp": "2026-09-23T06:50:42+00:00", "action": "frown", "description": "'prince' started frowning."}
+{"timestamp": "2026-09-23T06:50:43+00:00", "action": "smile", "description": "'prince' started smiling."}
+{"timestamp": "2026-09-23T06:50:43+00:00", "action": "blink", "description": "'prince' blinked."}
+{"timestamp": "2026-09-23T06:50:44+00:00", "action": "smile", "description": "'prince' started smiling."}
+{"timestamp": "2026-09-23T06:50:45+00:00", "action": "frown", "description": "'prince' started frowning."}
+{"timestamp": "2026-09-23T06:50:46+00:00", "action": "movement", "description": "'prince' moved center of center."}
+{"timestamp": "2026-09-23T06:50:47+00:00", "action": "movement", "description": "'prince' moved left of center."}
+{"timestamp": "2026-09-23T06:50:48+00:00", "action": "lock_released", "description": "Lost 'prince' for 16 frames."}
+{"timestamp": "2026-09-23T06:50:58+00:00", "action": "lock_acquired", "description": "Locked onto 'prince'."}
+{"timestamp": "2026-09-23T06:50:58+00:00", "action": "smile", "description": "'prince' started smiling."}
+{"timestamp": "2026-09-23T06:50:59+00:00", "action": "session_end", "description": "Locking session ended for 'prince'."}
