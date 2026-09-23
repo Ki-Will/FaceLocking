@@ -71,7 +71,6 @@ esp8266/*.log
 # ============================================================
 # IDE / editor
 # ============================================================
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -95,3 +94,7 @@ desktop.ini
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore

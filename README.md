@@ -1,15 +1,17 @@
-# Face Recognition, Tracking & Expression System
+# Face Locking
 
-A pipeline that detects and recognizes faces from a webcam, locks onto and
-tracks one identified person by steering a servo, and reads their facial
-expressions (blinks, smiles, frowns) — with the servo physically controlled
-by an ESP8266 over MQTT.
+Manual-selection identity locking, built on top of a face recognition and
+tracking pipeline. You choose which enrolled person to lock onto; the
+system recognizes them, locks on, ignores everyone else, keeps tracking
+them through brief recognition hiccups, steers a servo to follow them, and
+logs every detected action (movement direction, blinks, smiles, frowns)
+to a timestamped history file — with the servo physically controlled by
+an ESP8266 over MQTT.
 
-This README is ordered by what to get running first: the **software
-pipeline on your PC** (detection → enrollment → recognition → tracking →
-expressions) works and can be fully tested with just a webcam, before you
-touch any hardware. The **ESP8266 + servo** section comes after, since it
-only matters once the software side is already producing angles to send it.
+This README is ordered by what matters most: get **`src/face_lock.py`**
+running first — that's the primary deliverable. Everything else (basic
+recognition-only tools, ESP8266/hardware, MQTT broker choice, other
+tracking scripts) is supporting material below it.
 
 ---
 
@@ -18,7 +20,7 @@ only matters once the software side is already producing angles to send it.
 - Python 3.10–3.13
 - A webcam
 - Windows, macOS, or Linux (examples below use PowerShell; adjust for your shell)
-- *(For hardware control later)* an ESP8266 board (NodeMCU/Wemos), a hobby
+- *(For hardware control)* an ESP8266 board (NodeMCU/Wemos), a hobby
   servo, a 5V power supply for the servo, and a 2.4GHz WiFi network
 
 ---
@@ -33,18 +35,17 @@ pip install -r requirements.txt
 pip install python-dotenv pyserial adafruit-ampy
 ```
 
-`opencv-contrib-python` (already in `requirements.txt`) is required, not
-just `opencv-python` — the expression module uses `cv2.face`, which only
-ships in the `contrib` build. **Only one of `opencv-python` /
-`opencv-contrib-python` can be installed at a time** (they both provide
-the `cv2` module and will conflict):
+`opencv-contrib-python` is required, not just `opencv-python` — action
+detection uses `cv2.face`, which only ships in the `contrib` build. **Only
+one of `opencv-python` / `opencv-contrib-python` can be installed at a
+time** (both provide the `cv2` module and will conflict):
 
 ```powershell
 pip uninstall opencv-python opencv-python-headless -y
 pip install opencv-contrib-python
 ```
 
-Verify it worked:
+Verify:
 ```powershell
 python -c "import cv2; print(cv2.__version__); print('has cv2.face:', hasattr(cv2, 'face'))"
 ```
@@ -54,14 +55,14 @@ python -c "import cv2; print(cv2.__version__); print('has cv2.face:', hasattr(cv
 
 ## 3. Download the model files
 
-Three pretrained models are needed under `models/` (not committed to the
-repo — see `.gitignore` — download them once):
+Three pretrained models go under `models/` (not committed — see
+`.gitignore` — download once):
 
 | File | Purpose | Source |
 |---|---|---|
 | `models/face_detection_yunet_2023mar.onnx` | Face detection + 5-point landmarks | [OpenCV Zoo](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) |
 | `models/embedder_arcface.onnx` | 512-D face embedding for recognition | InsightFace `buffalo_l` pack (`w600k_r50.onnx`) |
-| `models/lbfmodel.yaml` | 68-point landmarks for blink/smile/frown | [kurnianggoro/GSOC2017](https://github.com/kurnianggoro/GSOC2017) |
+| `models/lbfmodel.yaml` | 68-point landmarks for action detection | [kurnianggoro/GSOC2017](https://github.com/kurnianggoro/GSOC2017) |
 
 ```powershell
 mkdir models -ErrorAction SilentlyContinue
@@ -71,17 +72,17 @@ pip install insightface
 python -c "from insightface.app import FaceAnalysis; a=FaceAnalysis(name='buffalo_l'); a.prepare(ctx_id=0)"
 copy "$env:USERPROFILE\.insightface\models\buffalo_l\w600k_r50.onnx" "models\embedder_arcface.onnx"
 
-# 68-point landmark model (for expressions)
+# 68-point landmark model (for action detection)
 curl.exe -L -o models\lbfmodel.yaml https://raw.githubusercontent.com/kurnianggoro/GSOC2017/master/data/lbfmodel.yaml
 ```
 
-For `face_detection_yunet_2023mar.onnx`, download it manually from the
+For `face_detection_yunet_2023mar.onnx`, download manually from the
 OpenCV Zoo link above and place it in `models/`.
 
-Confirm all three are present:
-```powershell
-dir models
-```
+Confirm all three are present: `dir models`
+
+**This runs CPU-only** — `onnxruntime` defaults to `CPUExecutionProvider`
+(see `src/embed.py`); no GPU is required or used anywhere in this project.
 
 ---
 
@@ -116,115 +117,108 @@ TARGET_CONFIRMATION_FRAMES=3
 TARGET_LOST_FRAMES=15
 ```
 
-Prefix `MQTT_SERVO_TOPIC` / `MQTT_STATUS_TOPIC` / `MQTT_DATA_TOPIC` with
-something unique to you (e.g. your name) if using a public broker like
-`broker.emqx.io` — this avoids colliding with other people's traffic on
-the same shared broker. See [§7](#7-mqtt-broker) for broker options.
+Prefix the MQTT topics with something unique to you if using a public
+broker (see [§8](#8-mqtt-broker)) to avoid colliding with other users'
+traffic on the same shared broker.
 
 ---
 
-## 5. Software pipeline — run in this order
-
-### 5.1 Enroll faces
+## 5. Enroll the identities you want to lock onto
 
 ```powershell
 python -m src.enroll
 ```
 Enter a name, then:
-- `a` — toggle auto-capture (recommended: aim for 15+ varied-angle samples)
+- `a` — toggle auto-capture (aim for 15+ varied-angle samples)
 - `SPACE` — capture one frame manually
-- `s` — **save** the identity to the database (required — capturing alone
-  does not save; the crops are cached, but `s` is what writes
-  `data/db/face_db.npz`)
+- `s` — **save** to the database (required — capturing alone does not
+  save; press `s` before quitting)
 - `q` — quit
 
-Repeat for each person you want recognized.
-
-### 5.2 (Optional) Evaluate the recognition threshold
-
-```powershell
-python -m src.evaluate
-```
-Uses your enrolled crops to suggest a `RECOGNITION_THRESHOLD` value that
-balances false accepts vs. false rejects. Put the suggested value in `.env`.
-
-### 5.3 Test recognition alone (no tracking, no hardware)
-
-```powershell
-python -m src.recognize
-```
-Shows live bounding boxes with names or "Unknown", and the match distance.
-Keys: `q` quit, `r` reload DB, `+`/`-` adjust threshold live.
-
-### 5.4 Basic face tracking (no identity — tracks whoever is biggest/most-centered)
-
-```powershell
-python -m src.track
-```
-Publishes servo angles over MQTT as it tracks the most prominent face.
-Doesn't require an enrolled identity.
-
-### 5.5 Identity-locked tracking (recommended)
-
-```powershell
-python -m src.track_with_recognition
-```
-Detects every frame, re-identifies every `RECOGNITION_EVERY_N_FRAMES`
-frames, and only locks onto (tracks) a face once the same identity is
-confirmed for `TARGET_CONFIRMATION_FRAMES` consecutive checks. Holds the
-lock for up to `TARGET_LOST_FRAMES` frames if the person briefly leaves
-frame. Keys: `q` quit, `c` recenter, `r` reload DB, `d` toggle debug HUD.
-
-### 5.6 Identity-locked tracking **with expressions** (full pipeline)
-
-```powershell
-python -m src.track_with_expressions
-```
-Everything in 5.5, plus once a target is locked: blink detection (via Eye
-Aspect Ratio on 68-point landmarks), and smile/frown detection (via mouth
-width and corner elevation). The HUD shows live EAR value, blink count,
-and current expression (`Smiling` / `Frowning` / `Blinking` / `Neutral`).
-Expression results are also published over MQTT on `MQTT_DATA_TOPIC`
-alongside tracking data. Same keys as 5.5.
-
-> Expression thresholds (`SMILE_WIDTH_RATIO`, `SMILE_CORNER_RISE_PX`,
-> `FROWN_CORNER_DROP_PX`, `EAR_BLINK_THRESHOLD`) are heuristics defined at
-> the top of `src/expressions.py` — tune them for your camera/lighting if
-> detection feels too sensitive or not sensitive enough.
-
-At this point the whole software pipeline is verifiable end-to-end just
-by watching the console log show MQTT angle publishes — you don't need
-the ESP8266 connected yet to confirm detection/recognition/tracking/
-expressions are all working correctly.
+Repeat for each person. `src/face_lock.py` (next section) can only lock
+onto identities that exist in this database.
 
 ---
 
-## 6. ESP8266 + servo setup
+## 6. Face Locking — `src/face_lock.py` (primary deliverable)
 
-### 6.1 Wiring
+```powershell
+python -m src.face_lock
+```
+
+### What it does
+
+1. **Manual selection** — on startup, it lists every enrolled identity and
+   asks you to pick one by number or name. This is the identity that will
+   be locked onto — the system does not auto-select whoever it happens to
+   recognize first.
+2. **Lock activation** — the lock engages once the *selected* identity is
+   confidently recognized for `TARGET_CONFIRMATION_FRAMES` consecutive
+   recognition cycles (default 3).
+3. **Lock persistence** — once locked, every other detected face is
+   ignored entirely (not drawn, not tracked, not logged). The lock
+   survives brief recognition misses and is only released after
+   `TARGET_LOST_FRAMES` consecutive frames (default 15) with no sign of
+   the target — not after a single missed frame.
+4. **Mandatory action detection (locked identity only)** — while locked,
+   the system detects:
+   - **Movement direction** — left / right / center relative to frame
+     center, logged only when the direction changes (not every frame)
+   - **Blinks** — via Eye Aspect Ratio on 68-point landmarks
+   - **Smiles** / **Frowns** — via mouth width and corner elevation
+5. **Action history log** — every action is appended as one JSON object
+   per line to `data/action_log/<identity_name>.jsonl`:
+   ```json
+   {"timestamp": "2026-09-23T14:02:11+00:00", "action": "lock_acquired", "description": "Locked onto 'prince'."}
+   {"timestamp": "2026-09-23T14:02:14+00:00", "action": "movement", "description": "'prince' moved right of center."}
+   {"timestamp": "2026-09-23T14:02:16+00:00", "action": "blink", "description": "'prince' blinked."}
+   {"timestamp": "2026-09-23T14:02:19+00:00", "action": "smile", "description": "'prince' started smiling."}
+   ```
+   Every entry has exactly `timestamp`, `action`, and `description`.
+
+### Keys
+
+`q` quit &nbsp;·&nbsp; `c` recenter servo &nbsp;·&nbsp; `d` toggle debug HUD
+
+### Tuning
+
+Action-detection thresholds (`SMILE_WIDTH_RATIO`, `SMILE_CORNER_RISE_PX`,
+`FROWN_CORNER_DROP_PX`, `EAR_BLINK_THRESHOLD`) live at the top of
+`src/expressions.py` — heuristic, not a trained classifier by design
+(explainable, CPU-only logic). Tune for your camera/lighting if detection
+feels too sensitive or not sensitive enough.
+
+You can verify the whole software side (selection → lock → action
+logging) using just the console output and the `cv2.imshow` window — the
+ESP8266/servo is optional for confirming this part works; MQTT publishes
+will simply go out even without anything subscribed on the other end.
+
+---
+
+## 7. ESP8266 + servo setup (physical tracking output)
+
+### 7.1 Wiring
 
 - Servo signal wire → **D5 (GPIO14)** on the ESP8266
 - Servo power (red) → a proper **5V supply** — not the ESP8266's 3.3V pin;
   servos draw 200mA–1A under load, more than the board's regulator or a
   laptop USB port can reliably provide alongside WiFi
-- Servo ground (black/brown) → **shared ground** with the ESP8266 — this is
-  the single most common wiring mistake and causes "receives signal but
-  doesn't move" symptoms
+- Servo ground (black/brown) → **shared ground** with the ESP8266 — the
+  most common wiring mistake, and it causes "receives signal but doesn't
+  move" symptoms
 
-### 6.2 Important: WiFi must be 2.4GHz
+### 7.2 WiFi must be 2.4GHz
 
-The ESP8266's radio **cannot join 5GHz-only networks**. If your router
-only broadcasts one 5GHz SSID, either:
-- enable a separate 2.4GHz SSID in the router admin panel, or
-- use a phone hotspot set to 2.4GHz for testing.
-
-Check what's visible from your PC:
+The ESP8266's radio **cannot join 5GHz-only networks**. Check what's
+visible from your PC:
 ```powershell
 netsh wlan show networks mode=bssid
 ```
-Look at the `Band` field — it must show `2.4 GHz` for the ESP8266 to join.
+The `Band` field must show `2.4 GHz`. If your router is 5GHz-only, enable
+a separate 2.4GHz SSID in its admin panel, or use a phone hotspot set to
+2.4GHz for testing.
 
-### 6.3 Configure `esp8266/main.py`
+### 7.3 Configure `esp8266/main.py`
 
 ```python
 WIFI_SSID = "your-2.4ghz-ssid"
@@ -237,11 +231,10 @@ SERVO_TOPIC = "yourname/servo/angle"       # match .env's MQTT_SERVO_TOPIC
 STATUS_TOPIC = "yourname/tracking/status"  # match .env's MQTT_STATUS_TOPIC
 ```
 
-**Both the ESP8266 and your PC must be able to reach the same MQTT
-broker.** If using a local broker instead of a public one, both devices
-need to be on the *same LAN* (see [§7](#7-mqtt-broker)).
+Both the ESP8266 and your PC must be able to reach the same MQTT broker
+(see [§8](#8-mqtt-broker)).
 
-### 6.4 Flash the ESP8266 with `ampy`
+### 7.4 Flash with `ampy`
 
 Close any serial monitor connections first (ampy needs exclusive port access).
 
@@ -250,55 +243,66 @@ cd esp8266
 ampy --port COM5 put umqtt_simple.py
 ampy --port COM5 put main.py
 ```
-(replace `COM5` with your board's actual port — check Device Manager)
+(replace `COM5` with your board's actual port)
 
-Confirm what's on the board:
-```powershell
-ampy --port COM5 ls
-```
+Confirm: `ampy --port COM5 ls`
 
-Reset the board (power cycle, or press its reset button) and watch the log:
+Reset the board and watch the log:
 ```powershell
 python src\esp_logger.py
 ```
-(update `PORT` inside `esp_logger.py` to match your COM port first)
+(update `PORT` inside `esp_logger.py` first)
 
-You should see, in order: `[SERVO] angle: 90`, `[WiFi] Connected`,
-`[MQTT] Connected, result: 0`, `[MQTT] Subscribed: ...`, `[SYSTEM] Ready.`
+Expected order: `[SERVO] angle: 90` → `[WiFi] Connected` →
+`[MQTT] Connected, result: 0` → `[MQTT] Subscribed: ...` → `[SYSTEM] Ready.`
 
-### 6.5 Run the full system
+### 7.5 Run it end-to-end
 
-With the ESP8266 powered on, connected, and subscribed, run any of the
-tracking scripts from [§5](#5-software-pipeline--run-in-this-order) (5.4,
-5.5, or 5.6) on your PC. The servo should now physically move as it tracks.
+With the ESP8266 powered, connected, and subscribed, run
+`python -m src.face_lock` on your PC — the servo should now physically
+follow the locked identity as they move.
 
 ---
 
-## 7. MQTT broker
+## 8. MQTT broker
 
-Two options — pick one and make sure **both** `.env` and
-`esp8266/main.py` point at the same broker and topics.
+Pick one — both `.env` and `esp8266/main.py` must point at the same
+broker and topics.
 
-**Public broker (easiest to get running, no setup):**
+**Public broker (fastest to get running):**
 ```
 broker.emqx.io, port 1883
 ```
-Use topic names prefixed with something unique to you to avoid collisions
-with other users on the shared broker (see `.env` example in §4). Note
-this is unauthenticated and public — anyone who guesses your topic name
-could publish to it.
+Prefix topics with something unique to you to avoid collisions on the
+shared broker. Unauthenticated — anyone who guesses your topic name could
+publish to it.
 
-**Local broker (private, recommended once things are working):**
+**Local broker (private, recommended once things work):**
 Install [Mosquitto](https://mosquitto.org/download/), configure it to
-listen on your LAN IP with anonymous access, and point both devices at
-your PC's local network IP (find it with `ipconfig`). Both the ESP8266
-and your PC must be joined to the *same* WiFi network/subnet for this to
-work — check with `ipconfig` (PC) that the IP range matches the ESP8266's
-`[WiFi] Connected` log output.
+listen on your LAN IP with anonymous access, point both devices at your
+PC's local network IP (`ipconfig`). Both devices must be on the *same*
+WiFi network/subnet.
 
 ---
 
-## 8. Project structure
+## 9. Supporting scripts
+
+These were the intermediate build stages toward `face_lock.py`. Not
+required for the Face Locking deliverable, but useful for isolating
+problems (e.g. confirming recognition alone works before adding lock/log
+logic on top).
+
+| Script | Purpose |
+|---|---|
+| `python -m src.evaluate` | Suggests a `RECOGNITION_THRESHOLD` from your enrolled crops |
+| `python -m src.recognize` | Recognition only, no tracking, no hardware — `q` quit, `r` reload DB, `+`/`-` threshold |
+| `python -m src.track` | Basic tracking, no identity — follows whoever's biggest/most-centered |
+| `python -m src.track_with_recognition` | Identity-locked tracking, auto-locks onto first confirmed identity (no manual selection, no action log — the precursor to `face_lock.py`) |
+| `python -m src.track_with_expressions` | Same as above, plus live expression HUD (no manual selection, no action log) |
+
+---
+
+## 10. Project structure
 
 ```
 ├── requirements.txt
@@ -309,7 +313,8 @@ work — check with `ipconfig` (PC) that the IP range matches the ESP8266's
 │   └── lbfmodel.yaml
 ├── data/                         # not committed — personal biometric data
 │   ├── db/face_db.npz            # enrolled identity embeddings
-│   └── enroll/<name>/*.jpg       # raw aligned enrollment crops
+│   ├── enroll/<name>/*.jpg       # raw aligned enrollment crops
+│   └── action_log/<name>.jsonl   # face_lock.py action history
 ├── esp8266/
 │   ├── main.py                   # WiFi + MQTT + servo control firmware
 │   └── umqtt_simple.py           # minimal MQTT client for MicroPython
@@ -318,28 +323,30 @@ work — check with `ipconfig` (PC) that the IP range matches the ESP8266's
     ├── detect_landmarks.py       # YuNet face detection + 5-point landmarks
     ├── align.py                  # 5-point affine alignment to 112x112
     ├── embed.py                  # ArcFace ONNX embedding extraction
-    ├── enroll.py                 # enrollment tool (§5.1)
-    ├── evaluate.py                # threshold tuning tool (§5.2)
-    ├── recognize.py               # Recognizer class + standalone demo (§5.3)
-    ├── track.py                   # basic tracking, no identity (§5.4)
-    ├── track_with_recognition.py  # identity-locked tracking (§5.5)
+    ├── enroll.py                 # enrollment tool (§5)
+    ├── evaluate.py                # threshold tuning tool (§9)
+    ├── recognize.py               # Recognizer class + standalone demo (§9)
     ├── expressions.py             # blink/smile/frown via cv2.face LBF landmarks
-    ├── track_with_expressions.py  # full pipeline: tracking + expressions (§5.6)
+    ├── face_lock.py               # PRIMARY: manual selection, lock, action log (§6)
+    ├── track.py                   # basic tracking, no identity (§9)
+    ├── track_with_recognition.py  # auto-lock tracking, precursor to face_lock.py (§9)
+    ├── track_with_expressions.py  # auto-lock tracking + expression HUD (§9)
     ├── mqtt_bridge.py             # PC-side MQTT publish wrapper
     └── esp_logger.py              # live serial log viewer for the ESP8266
 ```
 
 ---
 
-## 9. Troubleshooting
+## 11. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
+| `No enrolled identities found` at startup | Nothing enrolled yet, or enrolled but never saved | Run `python -m src.enroll`, remember to press `s` before quitting |
 | `has cv2.face: False` | Plain `opencv-python` installed, not `opencv-contrib-python` | See §2 |
 | `LBF model not found` | `models/lbfmodel.yaml` missing | See §3 |
-| `[WiFi] waiting...` forever, then `RuntimeError` | ESP8266 is 2.4GHz-only, your SSID is 5GHz | See §6.2 |
+| `[WiFi] waiting...` forever, then `RuntimeError` | ESP8266 is 2.4GHz-only, your SSID is 5GHz | See §7.2 |
 | `MQTTException: No MQTT CONNACK` | Malformed CONNECT packet (fixed in the `umqtt_simple.py` in this repo), wrong broker/port, or broker rejecting anonymous connections | Confirm you have the current `umqtt_simple.py`; test the broker with `mosquitto_pub`/`sub` first |
 | `OSError: [Errno 110] ETIMEDOUT` on MQTT connect | ESP8266 and the MQTT broker are on different, unreachable networks | Confirm both devices' `ipconfig`/`ifconfig` show the same subnet, or use a public broker |
-| Servo receives MQTT angles but doesn't move | Most often power/ground wiring — servo needs a real 5V rail and a ground shared with the ESP8266; also try disabling WiFi temporarily to rule out ESP8266 software-PWM/WiFi timing jitter | See §6.1; try manually rotating the horn by hand to check for resistance |
-| `TypeError: Object of type bool is not JSON serializable` on MQTT publish | numpy `bool_` (from OpenCV/numpy comparisons) instead of native Python `bool` | Fixed in the current `expressions.py` (`bool(...)` wraps around all comparison results) |
-| `0 identities` when running `recognize.py` after enrolling | Forgot to press `s` during enrollment — capturing crops alone does not save the database | Rerun `enroll.py`, it reloads existing crops automatically, then press `s` |
+| Servo receives MQTT angles but doesn't move | Most often power/ground wiring — servo needs a real 5V rail and a ground shared with the ESP8266; also try disabling WiFi temporarily to rule out ESP8266 software-PWM/WiFi timing jitter | See §7.1; try manually rotating the horn by hand to check for resistance |
+| `TypeError: Object of type bool is not JSON serializable` on MQTT publish | numpy `bool_` (from OpenCV/numpy comparisons) instead of native Python `bool` | Fixed in the current `expressions.py` (`bool(...)` wraps all comparison results) |
+| Lock never activates even though the right person is on camera | Selected name doesn't exactly match an enrolled name, or lighting/angle is hurting recognition confidence | Re-check `rec.names` matches what you typed; try `python -m src.recognize` first to sanity-check recognition alone |
