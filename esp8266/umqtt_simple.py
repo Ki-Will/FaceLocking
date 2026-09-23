@@ -30,19 +30,9 @@ class MQTTClient:
         self.sock = None
         self.cb = None
 
-    def _send_str(self, value):
+    def _encode_str(self, value):
         encoded = value.encode()
-
-        self.sock.write(
-            struct.pack(
-                "!H",
-                len(encoded),
-            )
-        )
-
-        self.sock.write(
-            encoded
-        )
+        return struct.pack("!H", len(encoded)) + encoded
 
     def _encode_remaining_length(
         self,
@@ -129,92 +119,48 @@ class MQTTClient:
         )[0][-1]
 
         self.sock = socket.socket()
-
-        self.sock.settimeout(
-            5
-        )
-
-        self.sock.connect(
-            addr
-        )
+        self.sock.settimeout(5)
+        self.sock.connect(addr)
 
         flags = 0x02
 
         if self.user is not None:
             flags |= 0x80
-
             if self.password is not None:
                 flags |= 0x40
 
-        packet = bytearray()
+        var_header = bytearray()
+        var_header.extend(b"\x00\x04MQTT")
+        var_header.append(0x04)
+        var_header.append(flags)
+        var_header.extend(struct.pack("!H", self.keepalive))
 
-        packet.extend(
-            b"\x00\x04MQTT"
-        )
-
-        packet.append(0x04)
-
-        packet.append(flags)
-
-        packet.extend(
-            struct.pack(
-                "!H",
-                self.keepalive,
-            )
-        )
-
-        self._send_str(
-            self.client_id
-        )
+        payload = bytearray()
+        payload.extend(self._encode_str(self.client_id))
 
         if self.user is not None:
-            self._send_str(
-                self.user
-            )
-
+            payload.extend(self._encode_str(self.user))
             if self.password is not None:
-                self._send_str(
-                    self.password
-                )
+                payload.extend(self._encode_str(self.password))
 
-        remaining = len(
-            packet
-        )
+        packet = var_header + payload
+        remaining = len(packet)
 
-        # Packet header
-        self.sock.write(
-            b"\x10"
-        )
-
-        self.sock.write(
-            self._encode_remaining_length(
-                remaining
-            )
-        )
-
-        self.sock.write(
-            packet
-        )
+        self.sock.write(b"\x10")
+        self.sock.write(self._encode_remaining_length(remaining))
+        self.sock.write(packet)
 
         response = self._wait_msg()
 
         if response is None:
-            raise MQTTException(
-                "No MQTT CONNACK"
-            )
+            raise MQTTException("No MQTT CONNACK")
 
         msg_type, _, payload = response
 
-        if (
-            msg_type != 2
-            or len(payload) < 2
-        ):
-            raise MQTTException(
-                "Invalid CONNACK"
-            )
+        if msg_type != 2 or len(payload) < 2:
+            raise MQTTException("Invalid CONNACK")
 
         return payload[1]
-
     def set_callback(
         self,
         callback,

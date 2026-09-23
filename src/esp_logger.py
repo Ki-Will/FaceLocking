@@ -9,7 +9,7 @@ import serial
 import time
 
 # -------- CONFIG --------
-PORT = "COM8"        # Change to your ESP8266 port
+PORT = "COM5"        # Change to your ESP8266 port
 BAUD = 115200        # MicroPython REPL baud rate
 
 def main():

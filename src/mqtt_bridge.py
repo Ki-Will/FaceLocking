@@ -16,7 +16,7 @@ from .config import cfg
 
 class MqttBridge:
     def __init__(self, client_id: str = "pc-face-tracker"):
-        self.client = mqtt.Client(client_id="esp8266-face-servo", clean_session=True)
+        self.client = mqtt.Client(client_id=client_id, clean_session=True)
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
 

@@ -12,15 +12,15 @@ from umqtt_simple import MQTTClient
 # WIFI
 # ============================================================
 
-WIFI_SSID = "Board room"
-WIFI_PASSWORD = "Meeting@2024"
+WIFI_SSID = "Ngaho_ra"
+WIFI_PASSWORD = "icyayi_cya_mukaru"
 
 
 # ============================================================
 # MQTT
 # ============================================================
 
-MQTT_BROKER = "10.12.74.55"
+MQTT_BROKER = "broker.emqx.io"
 MQTT_PORT = 1883
 
 MQTT_CLIENT_ID = (
@@ -389,7 +389,7 @@ def main():
                 )
 
             time.sleep(
-                0.02
+                0.1
             )
 
         except Exception as exc:
